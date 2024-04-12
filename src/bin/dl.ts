@@ -5,8 +5,22 @@ import { URL } from 'node:url'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { program } from 'commander'
+import { ensureFileSync } from 'fs-extra'
 
-const save_file_path = process.cwd()
+// const save_file_path = process.cwd()
+const config_file_path = path.join(path.dirname(process.argv[1]), '../config.json')
+ensureFileSync(config_file_path)
+
+async function getConfigFormFile() {
+  try {
+    const text = await fs.readFile(config_file_path, { encoding: 'utf-8' })
+    const obj: { proxy?: string; path?: string } = text ? JSON.parse(text) : {}
+    console.table(obj)
+    return obj
+  } catch (error) {
+    return {}
+  }
+}
 
 /**
  * Downloads a file from the provided URL.
@@ -14,7 +28,7 @@ const save_file_path = process.cwd()
  * @param urlStr - the URL to download the file from
  * @return
  */
-async function download(urlStr: string, save_path = save_file_path) {
+async function download(urlStr: string, save_path?: string) {
   if (typeof urlStr !== 'string') {
     throw Error('下载链接格式错误' + urlStr)
   }
@@ -25,6 +39,8 @@ async function download(urlStr: string, save_path = save_file_path) {
   } else {
     temp_url = urlStr
   }
+
+  const { proxy, path: config_path } = await getConfigFormFile()
 
   const spinner = ora('开始下载').start()
   spinner.color = 'yellow'
@@ -40,14 +56,14 @@ async function download(urlStr: string, save_path = save_file_path) {
             //   maxSockets: 256,
             //   maxFreeSockets: 256,
             //   scheduling: 'lifo',
-            proxy: 'http://127.0.0.1:7890',
+            proxy: proxy ?? 'http://127.0.0.1:7890',
           }),
         },
       })
       .buffer()
 
     const filename = `${info.repo}-${info.version}.zip`
-    const filepath = path.join(save_path, filename)
+    const filepath = path.join(save_path ?? config_path ?? './', filename)
     await fs.writeFile(filepath, buf)
     spinner.succeed(`下载完成: ${filepath}`)
   } catch (error) {
@@ -80,7 +96,7 @@ interface Option {
 }
 
 program
-  .name('dl')
+  .name('download tool')
   .description('github 仓库源码下载工具')
   .option('-n, --name <char>', '用户名称和仓库名称')
   .option('-b, --brance <char>', '按分支下载', 'master')
@@ -101,11 +117,11 @@ async function hadnlerOption(options: Option) {
   } else {
     temp_url = `https://github.com/${options.name}/archive/refs/heads/${options.brance}.zip`
   }
-  let temp_path: string
+  let temp_path: string | undefined
   if (path.isAbsolute(options.path)) {
     temp_path = options.path
   } else {
-    temp_path = path.join(process.cwd(), options.path)
+    // temp_path = path.join(process.cwd(), options.path)
   }
   await download(temp_url, temp_path)
 }
